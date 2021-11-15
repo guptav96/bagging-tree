@@ -18,3 +18,5 @@ Execute the following scripts to see the results:
 ```python cv_numtrees.py``` to compare the performance of models with varying number of trees in the ensemble.
 
 ```python neural_net.py trainingSet.csv testSet.csv``` to check the performance of dataset with neural networks.
+
+Results for the above models and scripts are available in `hw4.pdf`
