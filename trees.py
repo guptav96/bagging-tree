@@ -1,6 +1,7 @@
 """ Implementation of DT, Bagged Trees and Random Forests"""
 import sys
 
+import random
 import pandas as pd
 import numpy as np
 import math
@@ -27,16 +28,16 @@ def accuracy(original_labels, predicted_labels):
 ##############################################################
 
 def gini(target_column):
-    _, counts = np.unique(target_column, return_counts = True)
-    return 1 - sum(pow(count/len(target_column), 2) for count in counts)
+    p = np.bincount(target_column)/len(target_column)
+    return 1 - np.sum(np.square(p))
 
-def giniGain(train_df, attribute, label):
-    total_gini = gini(train_df[label])
+def giniGain(train_df, attribute, gini_index_label):
+    total_len = len(train_df)
 
     elements, counts = np.unique(train_df[attribute], return_counts=True)
-    weighted_gini = sum(counts[i]/len(train_df) * gini(train_df[train_df[attribute] == elements[i]][label]) for i in range(len(elements)))
+    weighted_gini = sum(counts[i]/total_len * gini(train_df[train_df[attribute] == elements[i]][label]) for i in range(len(elements)))
 
-    return total_gini - weighted_gini
+    return gini_index_label - weighted_gini
 
 def decisionTreeHelper(train_df, attributes, attributes_used, max_depth, sample_attrs = False):
     one_count = train_df[label].sum()
@@ -55,11 +56,11 @@ def decisionTreeHelper(train_df, attributes, attributes_used, max_depth, sample_
         if sample_attrs == True:
             # sampling sqrt(p) attributes
             n = len(attributes) # n = 49, total number of attributes
-            samples = np.random.choice(n-1, int(math.sqrt(n)), replace=False)
-            attributes_v = [attributes[idx] for idx in samples]
+            attributes_v = random.sample(attributes, int(math.sqrt(n)))
 
         # Select the attribute with the most information gain
-        attribute_points = [giniGain(train_df, attribute, label) if attribute in attributes_v \
+        gini_index_label = gini(train_df[label])
+        attribute_points = [giniGain(train_df, attribute, gini_index_label) if attribute in attributes_v \
                                 and attribute not in attributes_used else -1 for attribute in attributes]
         best_attribute_index = np.argmax(attribute_points)
         best_attribute = attributes[best_attribute_index]
@@ -71,8 +72,10 @@ def decisionTreeHelper(train_df, attributes, attributes_used, max_depth, sample_
         attributes_used.append(best_attribute)
         tree[best_attribute]['*'] = most_freq_label
 
-        for attr_val in train_df[best_attribute].unique():
+        for attr_val in np.unique(train_df[best_attribute]):
             train_df_v = train_df[train_df[best_attribute] == attr_val]
+            # create a copy of attributes_used, otherwise when going up the recursion
+            # attributes_used will store non used attributes because of reference.
             tree[best_attribute][attr_val] = decisionTreeHelper(train_df_v, attributes, list(attributes_used), max_depth - 1, sample_attrs)
 
     return tree
@@ -80,7 +83,7 @@ def decisionTreeHelper(train_df, attributes, attributes_used, max_depth, sample_
 def decisionTree(train_df, test_df, max_depth = 8):
     # print(train_df.describe())
 
-    attributes = train_df.drop(columns=label).columns
+    attributes = list(train_df.drop(columns=label).columns)
     tree = decisionTreeHelper(train_df, attributes, [], max_depth)
     # pprint.pprint(tree)
 
@@ -91,9 +94,10 @@ def decisionTree(train_df, test_df, max_depth = 8):
 
 def predictDT(input_df, tree):
     result = []
-    for idx in range(len(input_df)):
-        predicted_result = predictQuery(input_df.iloc[idx,:], tree)
-        result.append(predicted_result)
+    input_rows = input_df.iloc[:, :-1].to_dict(orient="records")
+    print(input_rows)
+    for idx in range(len(input_rows)):
+        result.append(predictQuery(input_rows[idx], tree))
     return result
 
 def predictQuery(query, tree):
@@ -112,7 +116,7 @@ def predictQuery(query, tree):
 
 def bagging(train_df, test_df, max_depth = 8, num_trees = 30):
     # s = time.time()
-    attributes = train_df.drop(columns=label).columns
+    attributes = list(train_df.drop(columns=label).columns)
 
     trees = []
     if multiprocessing_:
@@ -137,20 +141,18 @@ def bagging(train_df, test_df, max_depth = 8, num_trees = 30):
 
 def predictBT(input_df, trees):
     result = []
-
-    for idx in range(len(input_df)):
+    input_rows = input_df.iloc[:, :-1].to_dict(orient="records")
+    for idx in range(len(input_rows)):
         query_result = []
         for tree in trees:
-            predicted_result = predictQuery(input_df.iloc[idx,:], tree)
-            query_result.append(predicted_result)
+            query_result.append(predictQuery(input_rows[idx], tree))
         result.append(1 if sum(query_result)/len(query_result) >= 0.5 else 0)
-    
     return result
 
 #####################################################################
 
 def randomForests(train_df, test_df, max_depth = 8, num_trees = 30):
-    attributes = train_df.drop(columns=label).columns    
+    attributes = list(train_df.drop(columns=label).columns)   
     trees = []
     if multiprocessing_:
         results_objs = []
@@ -175,14 +177,12 @@ def randomForests(train_df, test_df, max_depth = 8, num_trees = 30):
 
 def predictRF(input_df, trees):
     result = []
-
-    for idx in range(len(input_df)):
+    input_rows = input_df.iloc[:, :-1].to_dict(orient="records")
+    for idx in range(len(input_rows)):
         query_result = []
         for tree in trees:
-            predicted_result = predictQuery(input_df.iloc[idx,:], tree)
-            query_result.append(predicted_result)
+            query_result.append(predictQuery(input_rows[idx], tree))
         result.append(1 if sum(query_result)/len(query_result) >= 0.5 else 0)
-
     return result
 
 ######################################################################
@@ -206,4 +206,4 @@ if __name__ == '__main__':
     train_df = pd.read_csv(str(training_data_filename))
     test_df = pd.read_csv(str(test_data_file_name))
     perform(train_df, test_df, model_idx)
-    print(f'Total Time Elapsed: {time.time()-st} seconds')
+    print(f'Total Time Elapsed: {round(time.time()-st,2)} seconds')

@@ -59,5 +59,5 @@ if __name__ == '__main__':
     acc_list3, err_list3 = crossValidationFrac(train_df, 3)
     print('###########################################')
     # plotting the curves
-    print(f'Time Elapsed: {time.time() -s} seconds')
+    print(f'Total Time Elapsed: {round(time.time()-s,2)} seconds')
     plot_curves(list(map(lambda x: x * len(train_df), frac_list)), 'Number of training samples', acc_list1, err_list1, acc_list2, err_list2, acc_list3, err_list3)
